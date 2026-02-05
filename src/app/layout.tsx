@@ -8,7 +8,9 @@ import { Providers } from "@/components/providers";
 import { ThemeProvider } from "@/components/theme-provider";
 
 
+import "allotment/dist/style.css";
 import "./globals.css";
+
 import { pl } from "date-fns/locale";
 import { Toaster } from "@/components/ui/sonner";
 
