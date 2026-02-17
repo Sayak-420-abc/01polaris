@@ -1,5 +1,5 @@
 
-/*
+
 import { ProjectIdLayout } from "@/features/projects/components/project-id-layout";
 
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -10,7 +10,7 @@ const Layout = async ({
 }: {
   children: React.ReactNode;
   
-  /*params: Promise<{ projectId: Id<"projects"> }>;
+  params: Promise<{ projectId: Id<"projects"> }>;
 }) => {
   const { projectId } = await params;
 
@@ -18,7 +18,7 @@ const Layout = async ({
 };
 
 export default Layout;
-*/
+
 /*
 import { ProjectIdLayout } from "@/features/projects/components/project-id-layout";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -36,7 +36,7 @@ const Layout = async ({
 };
 
 export default Layout;
-*/
+
 
 import { ProjectIdLayout } from "@/features/projects/components/project-id-layout";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -60,4 +60,4 @@ const Layout = async ({
 export default Layout;
 
 
-
+*/
