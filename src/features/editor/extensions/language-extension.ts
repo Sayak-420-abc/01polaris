@@ -5,7 +5,6 @@ import { css } from "@codemirror/lang-css";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { python } from "@codemirror/lang-python";
-import { cpp } from "@codemirror/lang-cpp";
 
 export const getLanguageExtension = (filename: string): Extension => {
   const ext = filename.split(".").pop()?.toLowerCase();
@@ -30,17 +29,6 @@ export const getLanguageExtension = (filename: string): Extension => {
       return markdown();
     case "py":
       return python();
-
-    // ✅ C / C++
-    case "c":
-      return cpp(); // C is supported by cpp()
-    case "cpp":
-    case "cc":
-    case "cxx":
-    case "h":
-    case "hpp":
-      return cpp();
-
     default:
       return [];
   }
