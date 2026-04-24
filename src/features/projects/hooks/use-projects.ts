@@ -36,37 +36,51 @@ export const useCreateProject = () => {
           ...existingProjects,
         ]);
       }
-    }
+    },
   );
 };
 
 export const useRenameProject = () => {
   return useMutation(api.projects.rename).withOptimisticUpdate(
     (localStore, args) => {
-      const existingProject= localStore.getQuery(api.projects.getById, {
-        id:args.id
-    });
+      const existingProject = localStore.getQuery(api.projects.getById, {
+        id: args.id,
+      });
 
-      if(existingProject !== undefined && existingProject!==null){
-        localStore.setQuery(api.projects.getById, {id: args.id}, {
+      if (existingProject !== undefined && existingProject !== null) {
+        localStore.setQuery(
+          api.projects.getById,
+          { id: args.id },
+          {
             ...existingProject,
             name: args.name,
             updatedAt: Date.now(),
-        });
+          },
+        );
       }
 
       const existingProjects = localStore.getQuery(api.projects.get);
-      
+
       if (existingProjects !== undefined) {
         localStore.setQuery(
-            api.projects.get, {},
-            existingProjects.map((project) => {
-                 return project._id === args.id?{
-                    ...project, name: args.name, updatedAt: Date.now()
-                 }: project
-                })
-        )
+          api.projects.get,
+          {},
+          existingProjects.map((project) => {
+            return project._id === args.id
+              ? {
+                  ...project,
+                  name: args.name,
+                  updatedAt: Date.now(),
+                }
+              : project;
+          }),
+        );
       }
-    }
+    },
   );
+};
+
+export const useUpdateProjectSettings = () => {
+  // TODO: add optimistic mutation
+  return useMutation(api.projects.updateSettings);
 };
