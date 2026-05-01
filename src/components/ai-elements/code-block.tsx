@@ -387,19 +387,34 @@ export const CodeBlockContent = ({
 }) => {
   // Memoized raw tokens for immediate display
   const rawTokens = useMemo(() => createRawTokens(code), [code]);
+  const cacheKey = useMemo(() => getTokensCacheKey(code, language), [code, language]);
 
-  // Try to get cached result synchronously, otherwise use raw tokens
-  const [tokenized, setTokenized] = useState<TokenizedCode>(
-    () => highlightCode(code, language) ?? rawTokens
-  );
+  const [asyncTokenized, setAsyncTokenized] = useState<
+    | {
+        key: string;
+        tokenized: TokenizedCode;
+      }
+    | null
+  >(null);
+
+  const cachedTokenized = highlightCode(code, language);
+  const tokenized =
+    cachedTokenized ??
+    (asyncTokenized?.key === cacheKey ? asyncTokenized.tokenized : rawTokens);
 
   useEffect(() => {
-    // Reset to raw tokens when code changes (shows current code, not stale tokens)
-    setTokenized(highlightCode(code, language) ?? rawTokens);
+    let active = true;
 
-    // Subscribe to async highlighting result
-    highlightCode(code, language, setTokenized);
-  }, [code, language, rawTokens]);
+    highlightCode(code, language, (result) => {
+      if (active) {
+        setAsyncTokenized({ key: cacheKey, tokenized: result });
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [code, language, cacheKey]);
 
   return (
     <div className="relative overflow-auto">
