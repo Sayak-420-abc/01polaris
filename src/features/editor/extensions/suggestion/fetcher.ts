@@ -1,4 +1,4 @@
-import ky from "ky";
+import ky, { HTTPError } from "ky";
 import { z } from "zod";
 import { toast } from "sonner";
 
@@ -41,6 +41,10 @@ export const fetcher = async (
     return validatedResponse.suggestion || null;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
+      return null;
+    }
+    if (error instanceof HTTPError && error.response.status === 429) {
+      console.warn("AI suggestion rate limit hit (429)");
       return null;
     }
     toast.error("Failed to fetch AI completion");

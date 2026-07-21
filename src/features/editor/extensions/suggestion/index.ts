@@ -59,7 +59,9 @@ class SuggestionWidget extends WidgetType{
 
 let debounceTimer: number | null = null;
 let isWaitingForSuggestion = false;
-const DEBOUNCE_DELAY=300;
+const DEBOUNCE_DELAY = 800;
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 2000;
 
 let currentAbortController: AbortController | null= null;
 
@@ -107,8 +109,48 @@ const createDebouncePlugin = (fileName: string)=>{
             }
 
             update(update: ViewUpdate){
-                if(update.docChanged || update.selectionSet){
-                    this.triggerSuggestion(update.view);
+                if(update.docChanged){
+                    // Only trigger suggestions on typing/insertion (not deletions/backspacing)
+                    let isInsert = false;
+                    update.transactions.forEach((tr) => {
+                        tr.changes.iterChanges((fromA, toA, fromB, toB, inserted) => {
+                            if (inserted.toString().length > 0) {
+                                isInsert = true;
+                            }
+                        });
+                    });
+
+                    if (isInsert) {
+                        this.triggerSuggestion(update.view);
+                    } else {
+                        // Immediately clear and cancel pending suggestions when deleting
+                        if(debounceTimer!==null){
+                            clearTimeout(debounceTimer);
+                            debounceTimer = null;
+                        }
+                        if(currentAbortController!==null){
+                            currentAbortController.abort();
+                            currentAbortController = null;
+                        }
+                        isWaitingForSuggestion=false;
+                        Promise.resolve().then(() => {
+                            update.view.dispatch({effects: setSuggestionEffect.of(null)});
+                        });
+                    }
+                } else if(update.selectionSet){
+                    // Clear pending debounce and active suggestions on cursor movement (when not typing)
+                    if(debounceTimer!==null){
+                        clearTimeout(debounceTimer);
+                        debounceTimer = null;
+                    }
+                    if(currentAbortController!==null){
+                        currentAbortController.abort();
+                        currentAbortController = null;
+                    }
+                    isWaitingForSuggestion=false;
+                    Promise.resolve().then(() => {
+                        update.view.dispatch({effects: setSuggestionEffect.of(null)});
+                    });
                 }
             }
 
@@ -125,13 +167,23 @@ const createDebouncePlugin = (fileName: string)=>{
 
                 debounceTimer=window.setTimeout(async()=>{
                     const payload= generatePayload(view, fileName);
-                    if(!payload){
+                    // Avoid triggering suggestions on empty lines or whitespace-only lines before the cursor
+                    if(!payload || !payload.textBeforeCursor.trim()){
+                        isWaitingForSuggestion=false;
+                        view.dispatch({effects: setSuggestionEffect.of(null)});
+                        return;
+                    }
+
+                    // Enforce client-side rate limiting (throttle requests to protect rate limits)
+                    const now = Date.now();
+                    if (now - lastRequestTime < MIN_REQUEST_INTERVAL) {
                         isWaitingForSuggestion=false;
                         view.dispatch({effects: setSuggestionEffect.of(null)});
                         return;
                     }
 
                     currentAbortController= new AbortController();
+                    lastRequestTime = now;
 
                     const suggestion= await fetcher(
                         payload, 

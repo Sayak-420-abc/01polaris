@@ -1,7 +1,7 @@
 import { generateText, Output } from "ai";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { auth } from "@clerk/nextjs/server";
 
 const suggestionSchema = z.object({
@@ -105,13 +105,68 @@ export async function POST(request: Request) {
       .replace("{nextLines}", nextLines || "")
       .replace("{lineNumber}", String(lineNumber));
 
-    const { output } = await generateText({
-      model: google("gemini-2.5-flash"),
-      output: Output.object({ schema: suggestionSchema }),
-      prompt,
-    });
+    // Load and pool available Gemini API keys
+    const rawKeys = [
+      process.env.SUGGESTION_GEMINI_API_KEYS,
+      process.env.GEMINI_API_KEYS,
+      process.env.GEMINI_API_KEY,
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    ];
+    
+    // Split, trim, filter out empty values, and keep unique keys
+    const keys: string[] = [];
+    for (const rawVal of rawKeys) {
+      if (!rawVal) continue;
+      const parts = rawVal.split(",").map((k) => k.trim()).filter(Boolean);
+      for (const part of parts) {
+        if (!keys.includes(part)) {
+          keys.push(part);
+        }
+      }
+    }
 
-    return NextResponse.json({ suggestion: output.suggestion });
+    // Shuffle the key pool to load-balance across all configured keys
+    const shuffledKeys = [...keys].sort(() => Math.random() - 0.5);
+
+    let outputSuggestion: string | null = null;
+    let lastError: any = null;
+
+    if (shuffledKeys.length > 0) {
+      // Loop over keys to attempt failover/retry
+      for (const key of shuffledKeys) {
+        try {
+          const googleProvider = createGoogleGenerativeAI({ apiKey: key });
+          const { output } = await generateText({
+            model: googleProvider("gemini-2.5-flash"),
+            output: Output.object({ schema: suggestionSchema }),
+            prompt,
+          });
+          outputSuggestion = output.suggestion;
+          break; // Successfully got suggestion, break retry loop
+        } catch (err) {
+          console.warn("Gemini suggestion failed for key:", key.substring(0, 8) + "...", err);
+          lastError = err;
+        }
+      }
+    } else {
+      // Fallback: If no keys are explicitly found in env (use default SDK credentials path)
+      const googleProvider = createGoogleGenerativeAI({});
+      const { output } = await generateText({
+        model: googleProvider("gemini-2.5-flash"),
+        output: Output.object({ schema: suggestionSchema }),
+        prompt,
+      });
+      outputSuggestion = output.suggestion;
+    }
+
+    if (outputSuggestion === null) {
+      if (lastError) {
+        throw lastError;
+      }
+      throw new Error("Failed to generate suggestion with any available key");
+    }
+
+    return NextResponse.json({ suggestion: outputSuggestion });
   } catch (error) {
     console.error("Suggestion error:", error);
     return NextResponse.json(

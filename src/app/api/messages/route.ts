@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { verifyToken } from "@clerk/backend";
 
 import { inngest } from "@/inngest/client";
 import { convex } from "@/lib/convex-client";
@@ -14,7 +15,34 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
+  const authData = await auth();
+  let userId = authData.userId;
+
+  console.log("=== API Auth Debug ===");
+  console.log("Cookie userId:", userId);
+  console.log("sessionId:", authData.sessionId);
+  console.log("Clerk Publishable Key:", process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  console.log("Clerk Secret Key exists:", !!process.env.CLERK_SECRET_KEY);
+
+  if (!userId) {
+    // Fallback: Check Authorization header for Bearer token
+    const authHeader = request.headers.get("Authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      const token = authHeader.substring(7);
+      try {
+        const verifiedToken = await verifyToken(token, {
+          secretKey: process.env.CLERK_SECRET_KEY,
+          clockSkewInMs: 15000000, // 4 hours leeway for system clock drift
+        });
+        userId = verifiedToken.sub;
+        console.log("Bearer userId verified:", userId);
+      } catch (err) {
+        console.error("Clerk verifyToken failed for bearer token:", err);
+      }
+    }
+  }
+  console.log("Final userId:", userId);
+  console.log("=== End API Auth Debug ===");
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

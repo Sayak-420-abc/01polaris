@@ -9,9 +9,10 @@ import {
   colors,
   uniqueNamesGenerator,
 } from "unique-names-generator";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 
@@ -31,6 +32,9 @@ export const ProjectsView = () => {
   const [commandDialogOpen, setCommandDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
 
+  const createProjectRef = useRef(createProject);
+  createProjectRef.current = createProject;
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey) {
@@ -41,6 +45,19 @@ export const ProjectsView = () => {
         if (e.key === "i") {
           e.preventDefault();
           setImportDialogOpen(true);
+        }
+        if (e.key === "b") {
+          e.preventDefault();
+          setCommandDialogOpen(true);
+        }
+        if (e.key === ".") {
+          e.preventDefault();
+          const projectName = uniqueNamesGenerator({
+            dictionaries: [adjectives, animals, colors],
+            separator: "-",
+            length: 3,
+          });
+          createProjectRef.current({ name: projectName });
         }
       }
     };
@@ -59,7 +76,10 @@ export const ProjectsView = () => {
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
       />
-      <div className="min-h-screen bg-sidebar flex flex-col items-center justify-center p-6 md:p-16">
+      <div className="min-h-screen bg-sidebar flex flex-col items-center justify-center p-6 md:p-16 relative">
+        <div className="absolute top-6 right-6">
+          <UserButton afterSignOutUrl="/" />
+        </div>
         <div className="w-full max-w-sm mx-auto flex flex-col gap-4 items-center">
           <div className="flex justify-between gap-4 w-full items-center">
             <div className="flex items-center gap-2 w-full group/logo">
@@ -98,7 +118,7 @@ export const ProjectsView = () => {
               >
                 <div className="flex items-center justify-between w-full">
                   <SparkleIcon className="size-4" />
-                  <Kbd className="bg-accent border">⌘J</Kbd>
+                  <Kbd className="bg-accent border">ctrl+.</Kbd>
                 </div>
                 <div>
                   <span className="text-sm">New</span>

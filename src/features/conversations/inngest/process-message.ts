@@ -1,4 +1,4 @@
-import { createAgent, anthropic, createNetwork } from "@inngest/agent-kit";
+import { createAgent, gemini, createNetwork } from "@inngest/agent-kit";
 
 import { inngest } from "@/inngest/client";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -107,6 +107,29 @@ export const processMessage = inngest.createFunction(
       systemPrompt += `\n\n## Previous Conversation (for context only - do NOT repeat these responses):\n${historyText}\n\n## Current Request:\nRespond ONLY to the user's new message below. Do not repeat or reference your previous responses.`;
     }
 
+    // Pool all available Gemini API keys for rotation
+    const rawKeys = [
+      process.env.SUGGESTION_GEMINI_API_KEYS,
+      process.env.GEMINI_API_KEYS,
+      process.env.GEMINI_API_KEY,
+      process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+    ];
+    const keys: string[] = [];
+    for (const rawVal of rawKeys) {
+      if (!rawVal) continue;
+      const parts = rawVal.split(",").map((k) => k.trim()).filter(Boolean);
+      for (const part of parts) {
+        if (!keys.includes(part)) {
+          keys.push(part);
+        }
+      }
+    }
+
+    const getRandomKey = () => {
+      if (keys.length === 0) return undefined;
+      return keys[Math.floor(Math.random() * keys.length)];
+    };
+
     // Generate conversation title if it's still the default
     const shouldGenerateTitle =
       conversation.title === DEFAULT_CONVERSATION_TITLE;
@@ -115,9 +138,14 @@ export const processMessage = inngest.createFunction(
       const titleAgent = createAgent({
         name: "title-generator",
         system: TITLE_GENERATOR_SYSTEM_PROMPT,
-        model: anthropic({
-          model: "claude-3-5-haiku-20241022",
-          defaultParameters: { temperature: 0, max_tokens: 50 },
+        model: gemini({
+          model: "gemini-2.5-flash",
+          apiKey: getRandomKey(),
+          defaultParameters: {
+            generationConfig: {
+              temperature: 0,
+            },
+          },
         }),
       });
 
@@ -153,9 +181,14 @@ export const processMessage = inngest.createFunction(
       name: "polaris",
       description: "An expert AI coding assistant",
       system: systemPrompt,
-      model: anthropic({
-        model: "claude-opus-4-20250514",
-        defaultParameters: { temperature: 0.3, max_tokens: 16000 },
+      model: gemini({
+        model: "gemini-2.5-flash",
+        apiKey: getRandomKey(),
+        defaultParameters: {
+          generationConfig: {
+            temperature: 0.3,
+          },
+        },
       }),
       tools: [
         createListFilesTool({ internalKey, projectId }),
@@ -173,7 +206,7 @@ export const processMessage = inngest.createFunction(
     const network = createNetwork({
       name: "polaris-network",
       agents: [codingAgent],
-      maxIter: 20,
+      maxIter: 10,
       router: ({ network }) => {
         const lastResult = network.state.results.at(-1);
         const hasTextResponse = lastResult?.output.some(

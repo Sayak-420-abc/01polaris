@@ -1,6 +1,6 @@
 import ky from "ky";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CopyIcon, HistoryIcon, LoaderIcon, PlusIcon } from "lucide-react";
 
 import {
@@ -25,6 +25,7 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@clerk/nextjs";
 
 import {
   useConversation,
@@ -43,10 +44,41 @@ interface ConversationSidebarProps {
 export const ConversationSidebar = ({
   projectId,
 }: ConversationSidebarProps) => {
+  const { getToken } = useAuth();
   const [input, setInput] = useState("");
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
   const [pastConversationsOpen, setPastConversationsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleAddToChat = (e: Event) => {
+      const customEvent = e as CustomEvent<{ text: string; fileName?: string }>;
+      const { text, fileName } = customEvent.detail;
+
+      const extension = fileName ? fileName.split(".").pop() : "";
+      const formattedText = `\n\`\`\`${extension}\n${text}\n\`\`\`\n`;
+
+      setInput((prev) => {
+        const separator = prev && !prev.endsWith("\n") ? "\n" : "";
+        return prev + separator + formattedText;
+      });
+
+      // Focus the textarea
+      setTimeout(() => {
+        const textarea = document.querySelector(
+          'textarea[name="message"]'
+        ) as HTMLTextAreaElement | null;
+        if (textarea) {
+          textarea.focus();
+        }
+      }, 50);
+    };
+
+    window.addEventListener("add-to-chat", handleAddToChat);
+    return () => {
+      window.removeEventListener("add-to-chat", handleAddToChat);
+    };
+  }, []);
 
   const createConversation = useCreateConversation();
   const conversations = useConversations(projectId);
@@ -103,16 +135,35 @@ export const ConversationSidebar = ({
       }
     }
 
-    // Trigger Inngest function via API
+    const token = await getToken();
     try {
       await ky.post("/api/messages", {
         json: {
           conversationId,
           message: message.text,
         },
+        headers: token ? {
+          Authorization: `Bearer ${token}`,
+        } : undefined,
       });
-    } catch {
-      toast.error("Message failed to send");
+    } catch (error: any) {
+      console.error("Message send error:", error);
+      let errMsg = "Message failed to send";
+      if (error && error.response) {
+        try {
+          const errBody = await error.response.json();
+          if (errBody?.error) {
+            errMsg += `: ${errBody.error}`;
+          } else {
+            errMsg += ` (Status ${error.response.status})`;
+          }
+        } catch {
+          errMsg += ` (Status ${error.response.status})`;
+        }
+      } else if (error instanceof Error) {
+        errMsg += `: ${error.message}`;
+      }
+      toast.error(errMsg);
     }
 
     setInput("");
